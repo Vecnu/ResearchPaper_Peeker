@@ -4,7 +4,8 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>d12067e8-2311-47c0-a9d4-9d9aa6c148a7</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>ResearchPaper_Peeker.py</StartupFile>
+    <StartupFile>
+    </StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -21,7 +22,43 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="ResearchPaper_Peeker.py" />
+    <Compile Include="main.py" />
+    <Compile Include="src\core\document_processors\xml_processor.py" />
+    <Compile Include="src\core\document_processors\_init_.py" />
+    <Compile Include="src\core\keyword_engine\analyzer.py" />
+    <Compile Include="src\core\keyword_engine\_init_.py" />
+    <Compile Include="src\core\paywall_service\access_manager.py" />
+    <Compile Include="src\core\paywall_service\_init_.py" />
+    <Compile Include="src\core\source_handlers\base_handler.py" />
+    <Compile Include="src\core\source_handlers\google_scholar_handler.py" />
+    <Compile Include="src\core\source_handlers\ncbi_handler.py" />
+    <Compile Include="src\core\source_handlers\_init_.py" />
+    <Compile Include="src\infrastructure\api_gateway.py" />
+    <Compile Include="src\infrastructure\database.py" />
+    <Compile Include="src\infrastructure\error_handler.py" />
+    <Compile Include="src\infrastructure\queue_manager.py" />
+    <Compile Include="src\infrastructure\_init_.py" />
+    <Compile Include="src\support\cache_manager.py" />
+    <Compile Include="src\support\config_manager.py" />
+    <Compile Include="src\support\logging_service.py" />
+    <Compile Include="src\support\rate_limiter.py" />
+    <Compile Include="src\support\_init.py" />
+    <Compile Include="src\_init_.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="config\" />
+    <Folder Include="src\core\document_processors\" />
+    <Folder Include="src\core\keyword_engine\" />
+    <Folder Include="src\core\" />
+    <Folder Include="src\infrastructure\" />
+    <Folder Include="src\core\paywall_service\" />
+    <Folder Include="src\core\source_handlers\" />
+    <Folder Include="src\support\" />
+    <Folder Include="tests\" />
+    <Folder Include="src\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="config\config.yaml" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
