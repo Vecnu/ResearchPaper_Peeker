@@ -1,20 +1,23 @@
 from .base_handler import BaseSourceHandler
 import requests
 import xml.etree.ElementTree as ET
-
+import time  # Add this import
 class NCBIHandler(BaseSourceHandler):
     def __init__(self):
         self.base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
         
-    def search_articles(self, query: str, max_results: int = 10):
+    def search_articles(self, query: str, max_results: int = 100):
         try:
             search_url = f"{self.base_url}/esearch.fcgi"
             search_params = {
                 "db": "pmc",
-                "term": query,
+                "term": f'"{query}" AND "supplementary material"',
                 "retmode": "json",
                 "retmax": max_results
             }
+            full_url = requests.Request('GET', search_url, params=search_params).prepare().url
+            print(f"\nSearch Query URL: {full_url}")
+            
             response = requests.get(search_url, params=search_params, timeout=10)
             response.raise_for_status()
             data = response.json()
@@ -24,7 +27,6 @@ class NCBIHandler(BaseSourceHandler):
         except requests.exceptions.RequestException as e:
             print(f"⚠️ Error fetching search results: {e}")
             return []
-
     def get_article_metadata(self, article_ids: list):
         try:
             summary_url = f"{self.base_url}/esummary.fcgi"
@@ -33,6 +35,9 @@ class NCBIHandler(BaseSourceHandler):
                 "id": ",".join(article_ids),
                 "retmode": "json"
             }
+            full_url = requests.Request('GET', summary_url, params=summary_params).prepare().url
+            print(f"Metadata Query URL: {full_url}")
+            
             response = requests.get(summary_url, params=summary_params, timeout=10)
             response.raise_for_status()
             summary_data = response.json()
@@ -47,28 +52,92 @@ class NCBIHandler(BaseSourceHandler):
             print(f"⚠️ Error fetching article metadata: {e}")
             return {}
 
+    Retrieves supplementary materials (e.g. PDF, DOC, DOCX, TXT, RTF files) for a list of article IDs from the NCBI PMC database.
+    
+    This method fetches the full-text XML for each article in batches, parses the XML to find any supplementary material links, and returns a dictionary mapping article IDs to lists of supplementary material URLs.
+    
+    The method uses rate limiting to avoid overloading the NCBI API, and provides progress updates during the scanning process.
     def get_supplementary_materials(self, article_ids: list):
-        article_info = self.get_article_metadata(article_ids)
-        fetch_url = f"{self.base_url}/efetch.fcgi"
+        try:
+            fetch_url = f"{self.base_url}/efetch.fcgi"
+            batch_size = 9  # Changed from 20 to 10
+            all_materials = {}
+            total_processed = 0
 
-        for pmc_id in article_ids:
-            try:
-                fetch_params = {"db": "pmc", "id": pmc_id, "retmode": "xml"}
+            print(f"\nScanning {len(article_ids)} articles for supplementary materials...")
+            
+            for i in range(0, len(article_ids), batch_size):
+                batch_ids = article_ids[i:i + batch_size]
+                total_processed += len(batch_ids)
+                
+                print(f"\nProcessing batch {i//batch_size + 1} ({total_processed}/{len(article_ids)} articles)...")
+                
+                fetch_params = {
+                    "db": "pmc",
+                    "id": '%2C'.join(batch_ids),
+                    "retmode": "xml"
+                }
+                full_url = requests.Request('GET', fetch_url, params=fetch_params).prepare().url
+                print(f"Fetch Query URL (Batch {i//batch_size + 1}): {full_url}")
+                
+                if i > 0:
+                    time.sleep(1)  # Rate limiting
+                    
                 response = requests.get(fetch_url, params=fetch_params, timeout=10)
                 response.raise_for_status()
-
+                
+                # Parse XML for supplementary material links
                 root = ET.fromstring(response.content)
-                links = []
+                for article in root.findall(".//article"):
+                    pmc_id = article.find(".//article-id[@pub-id-type='pmc']")
+                    if pmc_id is not None:
+                        pmc_id = pmc_id.text
+                        supp_links = []
+                        
+                        # Find supplementary material sections
+                        for supp in article.findall(".//supplementary-material"):
+                            href = supp.get("xlink:href")
+                            if href and any(href.lower().endswith(ext) for ext in ['.pdf', '.doc', '.docx', '.txt', '.rtf']):
+                                supp_links.append(href)
+                        
+                        if supp_links:
+                            all_materials[pmc_id] = supp_links
+                            print(f"Found {len(supp_links)} supplementary files in PMC{pmc_id}")
 
-                for supp_mat in root.findall(".//supplementary-material"):
-                    link = supp_mat.get("{http://www.w3.org/1999/xlink}href")
-                    if link:
-                        links.append(link)
+            print(f"\nCompleted scanning {total_processed} articles")
+            print(f"Found supplementary materials in {len(all_materials)} articles")
+            
+            return all_materials
+            
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Error fetching supplementary materials: {e}")
+            return {}
 
-                if links:
-                    article_info[pmc_id]["links"] = links
-
-            except (requests.exceptions.RequestException, ET.ParseError) as e:
-                print(f"⚠️ Error processing PMC{pmc_id}: {e}")
-
-        return article_info
+def process_search_results(self, query: str, max_results: int = 100):
+    # Get article IDs from search
+    article_ids = self.search_articles(query, max_results)
+    
+    if not article_ids:
+        print("No articles found.")
+        return
+        
+    # Get article metadata (titles)
+    metadata = self.get_article_metadata(article_ids)
+    
+    # Get supplementary materials
+    materials = self.get_supplementary_materials(article_ids)
+    
+    # Count articles with supplementary materials
+    articles_with_supps = len(materials)
+    total_articles = len(article_ids)
+    
+    print(f"\nFound {articles_with_supps} articles with supplementary materials out of {total_articles} total results")
+    print("\nArticles with supplementary materials:")
+    
+    for pmc_id, links in materials.items():
+        title = metadata.get(pmc_id, {}).get('title', 'Title Not Available')
+        print(f"\nTitle: {title}")
+        print(f"PMC ID: {pmc_id}")
+        print("Supplementary Links:")
+        for link in links:
+            print(f"- {link}")
