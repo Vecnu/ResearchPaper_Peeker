@@ -52,11 +52,6 @@ class NCBIHandler(BaseSourceHandler):
             print(f"⚠️ Error fetching article metadata: {e}")
             return {}
 
-    Retrieves supplementary materials (e.g. PDF, DOC, DOCX, TXT, RTF files) for a list of article IDs from the NCBI PMC database.
-    
-    This method fetches the full-text XML for each article in batches, parses the XML to find any supplementary material links, and returns a dictionary mapping article IDs to lists of supplementary material URLs.
-    
-    The method uses rate limiting to avoid overloading the NCBI API, and provides progress updates during the scanning process.
     def get_supplementary_materials(self, article_ids: list):
         try:
             fetch_url = f"{self.base_url}/efetch.fcgi"
@@ -88,17 +83,43 @@ class NCBIHandler(BaseSourceHandler):
                 
                 # Parse XML for supplementary material links
                 root = ET.fromstring(response.content)
+                
+                # Define and register namespaces
+                namespaces = {
+                    'xlink': 'http://www.w3.org/1999/xlink'
+                }
+                ET.register_namespace('xlink', 'http://www.w3.org/1999/xlink')
+                
                 for article in root.findall(".//article"):
                     pmc_id = article.find(".//article-id[@pub-id-type='pmc']")
                     if pmc_id is not None:
                         pmc_id = pmc_id.text
                         supp_links = []
                         
-                        # Find supplementary material sections
+                        # 1. Find supplementary material sections
                         for supp in article.findall(".//supplementary-material"):
-                            href = supp.get("xlink:href")
+                            # Use findall with xpath to get the attribute with namespace
+                            href = supp.get('{http://www.w3.org/1999/xlink}href')
                             if href and any(href.lower().endswith(ext) for ext in ['.pdf', '.doc', '.docx', '.txt', '.rtf']):
                                 supp_links.append(href)
+                        
+                        # 2. Find ext-link elements with supplementary file references
+                        for ext_link in article.findall(".//ext-link"):
+                            href = ext_link.get('{http://www.w3.org/1999/xlink}href')
+                            if href and any(href.lower().endswith(ext) for ext in ['.pdf', '.doc', '.docx', '.txt', '.rtf']):
+                                supp_links.append(href)
+                        
+                        # 3. Find media elements with supplementary files
+                        for media in article.findall(".//media"):
+                            href = media.get('{http://www.w3.org/1999/xlink}href')
+                            if href and any(href.lower().endswith(ext) for ext in ['.pdf', '.doc', '.docx', '.txt', '.rtf']):
+                                # For JMIR articles, construct the full URL
+                                if href.startswith('jmir_'):
+                                    full_href = f"https://asset.jmir.pub/assets/{href}"
+                                    supp_links.append(full_href)
+                                else:
+                                    # For other journals or if already a full URL
+                                    supp_links.append(href)
                         
                         if supp_links:
                             all_materials[pmc_id] = supp_links
