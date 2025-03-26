@@ -1,21 +1,30 @@
 class DisplayService:
-    def display_results(self, article_info):
-        total_articles = len(article_info)
-        found_supplements = False
-        articles_with_supplements = 0
+    def display_results(self, results):
+        """
+        Display the results of the supplementary materials search
         
-        print(f"🔍 Total articles found: {total_articles}")
+        Args:
+            results: Dictionary with PMC IDs as keys and lists of links as values
+        """
+        if not results:
+            print("No results to display.")
+            return
         
-        for pmc_id, info in article_info.items():
-            if info["links"]:
-                found_supplements = True
-                articles_with_supplements += 1
-                print(f"📝 **{info['title']}** (PMC{pmc_id})")
-                for link in info["links"]:
-                    print(f"   📎 {link}")
-                print("\n" + "-" * 60)
-
-        print(f"📊 Articles with supplementary materials: {articles_with_supplements}")
+        print("\n🔍 Search Results Summary:")
+        print(f"📚 Articles with supplementary materials: {len(results)}")
         
-        if not found_supplements:
-            print("❌ No supplementary materials found for the retrieved articles.")
+        total_links = sum(len(links) for links in results.values() if links)
+        print(f"📎 Total supplementary materials found: {total_links}")
+        
+        # Display some samples if there are many results
+        if len(results) > 5:
+            print("\n📋 Sample of articles with supplementary materials:")
+            for pmc_id, links in list(results.items())[:5]:
+                if links:
+                    print(f"  • PMC{pmc_id}: {len(links)} supplementary files")
+            print(f"  • ... and {len(results) - 5} more articles")
+        else:
+            print("\n📋 Articles with supplementary materials:")
+            for pmc_id, links in results.items():
+                if links:
+                    print(f"  • PMC{pmc_id}: {len(links)} supplementary files")

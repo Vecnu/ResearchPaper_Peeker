@@ -1,5 +1,6 @@
 from src.core.source_handlers.ncbi_handler import NCBIHandler
 from src.support.logging_service import Logger
+from src.infrastructure.data_collector import DataCollector  # Add this import
 
 def get_source_handler():
     sources = {
@@ -23,7 +24,7 @@ def get_source_handler():
     print("Invalid source selection")
     return None
 
-def main():
+def main(collector):  # Add collector as a parameter
     handler = get_source_handler()
     if not handler:
         return
@@ -35,10 +36,18 @@ def main():
         
     articles = handler.search_articles(query)
     metadata = handler.get_article_metadata(articles)
-    results = handler.get_supplementary_materials(articles)
+    
+    # Assuming get_supplementary_materials returns XML content and links for each article
+    xml_contents, links_lists = handler.get_supplementary_materials(articles)
+    
+    # Use the collector to save the links
+    if links_lists:
+        collector.batch_save_links(articles, links_lists, source_type="ncbi")
     
     # Display results (can be moved to a separate display service)
     # Current display_results logic here
 
 if __name__ == "__main__":
-    main()
+    collector = DataCollector()
+    main(collector)  # Pass the collector to main
+    collector.print_summary()
