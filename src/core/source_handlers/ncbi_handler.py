@@ -162,3 +162,77 @@ def process_search_results(self, query: str, max_results: int = 100):
         print("Supplementary Links:")
         for link in links:
             print(f"- {link}")
+
+def save_efetch_xml_responses(self, article_ids, output_dir=None):
+    """
+    Fetch XML responses for given PMC IDs using efetch and save them to files.
+    This method is for testing/debugging purposes only.
+    
+    Args:
+        article_ids: List of PMC IDs
+        output_dir: Directory to save XML files (optional)
+        
+    Returns:
+        List of paths to saved XML files
+    """
+    saved_files = []
+    
+    # Create output directory for XML responses
+    if output_dir is None:
+        from pathlib import Path
+        import os
+        import datetime
+        
+        # Create a folder with today's date
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        base_dir = Path("output")
+        output_dir = base_dir / today / "xml_responses"
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"Created XML output directory: {output_dir}")
+    else:
+        output_dir = Path(output_dir) / "xml_responses"
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"Using provided XML output directory: {output_dir}")
+    
+    # Process in batches of 10 to avoid overwhelming the API
+    batch_size = 10
+    for i in range(0, len(article_ids), batch_size):
+        batch_ids = article_ids[i:i+batch_size]
+        batch_number = i // batch_size + 1
+        
+        try:
+            # Use efetch to get full article XML
+            efetch_url = f"{self.base_url}/efetch.fcgi"
+            efetch_params = {
+                "db": "pmc",
+                "id": ",".join(batch_ids),
+                "retmode": "xml"
+            }
+            
+            # For debugging
+            full_url = requests.Request('GET', efetch_url, params=efetch_params).prepare().url
+            print(f"EFetch URL (Batch {batch_number}): {full_url}")
+            
+            response = requests.get(efetch_url, params=efetch_params, timeout=30)
+            response.raise_for_status()
+            
+            # Create a meaningful filename
+            batch_file_name = f"batch_{batch_number}_ids_{'-'.join(batch_ids)}.xml"
+            xml_file_path = output_dir / batch_file_name
+            
+            # Save the raw XML response
+            with open(xml_file_path, 'wb') as xml_file:
+                xml_file.write(response.content)
+            
+            saved_files.append(str(xml_file_path))
+            print(f"✅ Saved XML response for batch {batch_number} to {xml_file_path}")
+                
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️ Error fetching XML for batch {batch_number}: {e}")
+            continue
+        except Exception as e:
+            print(f"⚠️ Unexpected error saving XML for batch {batch_number}: {e}")
+            continue
+    
+    print(f"Total XML files saved: {len(saved_files)}")
+    return saved_files

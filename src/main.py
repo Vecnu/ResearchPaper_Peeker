@@ -1,11 +1,29 @@
-from src.core.source_handlers.ncbi_handler import NCBIHandler
-from src.support.logging_service import Logger
-from src.infrastructure.data_collector import DataCollector
+import argparse
+import os
+from pathlib import Path
+import logging
+import datetime
+import sys
 
-# Get logger instance
-logger = Logger.get_instance()
+# Import your modules using relative imports
+from core.source_handlers.ncbi_handler import NCBIHandler
+from infrastructure.data_collector import DataCollector
+from support.display_service import DisplayService
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ResearchPaperPeeker")
+
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description="ResearchPaper_Peeker - Search and download supplementary materials")
+    parser.add_argument("--save-xml", action="store_true", help="Save XML responses for debugging")
+    parser.add_argument("--debug", action="store_true", help="Run in debug mode")
+    parser.add_argument("--max-results", type=int, default=100, help="Maximum number of results to return")
+    return parser.parse_args()
 
 def get_source_handler():
+    """Get the source handler based on user selection"""
     sources = {
         "1": ("NCBI", NCBIHandler),
         "2": ("Google Scholar", None)  # To be implemented
@@ -31,109 +49,67 @@ def get_source_handler():
     return None
 
 def main():
-    logger.info("Starting ResearchPaper_Peeker application")
+    """Main function to run the application"""
+    # Parse command line arguments
+    args = parse_arguments()
     
-    # Create a data collector instance
-    collector = DataCollector()
+    print("ResearchPaper_Peeker - Find and Download Supplementary Materials")
+    print("---------------------------------------------------------------")
     
-    try:
-        handler = get_source_handler()
-        if not handler:
-            logger.warning("No valid source handler selected. Exiting.")
-            return
-            
-        query = input("🔍 Enter search phrase: ").strip()
-        if not query:
-            logger.warning("Search phrase cannot be empty. Exiting.")
-            print("⚠️ Search phrase cannot be empty!")
-            return
-            
-        logger.info(f"Searching for articles with query: '{query}'")
-        articles = handler.search_articles(query)
-        logger.info(f"Found {len(articles)} articles")
-        
-        metadata = handler.get_article_metadata(articles)
-        logger.info(f"Retrieved metadata for {len(metadata)} articles")
-        
-        logger.info("Retrieving supplementary materials...")
-        results = handler.get_supplementary_materials(articles)
-        logger.info(f"Retrieved supplementary materials from {len(results)} articles")
-        
-        # Log the structure of results to help debug
-        logger.debug(f"Results type: {type(results)}")
-        if results:
-            if isinstance(results, dict):
-                sample_key = next(iter(results))
-                logger.debug(f"Sample key: {sample_key}, Value type: {type(results[sample_key])}")
-            elif isinstance(results, list) and results:
-                logger.debug(f"First item type: {type(results[0])}")
-        
-        try:
-            # Save links to files
-            logger.info("Saving supplementary links to files...")
-            collector.batch_save_links(results, source_type="ncbi")
-            
-            # Try to handle different result formats for display
-            logger.info("Displaying results...")
-            if isinstance(results, dict):
-                display_results(results)
-            elif isinstance(results, list):
-                # Convert list to expected format if needed
-                formatted_results = {}
-                for item in results:
-                    if isinstance(item, dict) and 'pmc_id' in item and 'links' in item:
-                        formatted_results[item['pmc_id']] = item['links']
-                display_results(formatted_results)
-            else:
-                logger.error(f"Unexpected results format: {type(results)}")
-                
-        except Exception as e:
-            logger.error(f"Error processing results: {str(e)}")
-            
-        # Print summary
-        collector.print_summary()
-        
-    except Exception as e:
-        logger.exception(f"Unexpected error in main application: {str(e)}")
-        print(f"❌ An error occurred. Check logs/errors.log for details.")
-    
-    logger.info("Application completed")
-
-def display_results(results):
-    """
-    Display the results of the supplementary materials search
-    
-    Args:
-        results: Dictionary with PMC IDs as keys and lists of links as values
-    """
-    if not results:
-        logger.info("No results to display.")
-        print("No results to display.")
+    # Get the source handler
+    source_handler = get_source_handler()
+    if not source_handler:
         return
     
-    print("\n🔍 Search Results Summary:")
-    print(f"📚 Articles with supplementary materials: {len(results)}")
+    # Get user query
+    query = input("\nEnter your search query: ").strip()
+    if not query:
+        print("Search query cannot be empty")
+        return
     
-    total_links = sum(len(links) for links in results.values() if links)
-    print(f"📎 Total supplementary materials found: {total_links}")
+    # Set maximum results
+    max_results = args.max_results
     
-    # Display some samples if there are many results
-    if len(results) > 5:
-        print("\n📋 Sample of articles with supplementary materials:")
-        for pmc_id, links in list(results.items())[:5]:
-            if links:
-                print(f"  • PMC{pmc_id}: {len(links)} supplementary files")
-        print(f"  • ... and {len(results) - 5} more articles")
-    else:
-        print("\n📋 Articles with supplementary materials:")
-        for pmc_id, links in results.items():
-            if links:
-                print(f"  • PMC{pmc_id}: {len(links)} supplementary files")
+    # Search for articles
+    print(f"\nSearching for articles with keyword: '{query}'...")
+    pmc_ids = source_handler.search_articles(query, max_results)
+    
+    if not pmc_ids:
+        print("No articles found")
+        return
+    
+    print(f"Found {len(pmc_ids)} articles")
+    
+    # For debugging: Save the XML responses if flag is set
+    if args.debug or args.save_xml:
+        print("\n📄 Saving XML responses for debugging...")
+        xml_files = source_handler.save_efetch_xml_responses(pmc_ids)
+        print(f"✅ Saved {len(xml_files)} XML response files")
+    
+        # Print the first few file paths to help locate them
+        if xml_files:
+            print("\nSaved XML files (first 3):")
+            for i, file_path in enumerate(xml_files[:3]):
+                print(f"  {i+1}. {file_path}")
+            if len(xml_files) > 3:
+                print(f"  ... and {len(xml_files) - 3} more files")
+    
+    # Get supplementary materials
+    print("\nLooking for supplementary materials...")
+    results = source_handler.get_supplementary_files(pmc_ids)
+    
+    # Display results
+    display_service = DisplayService()
+    display_service.display_results(results)
+    
+    # Save results
+    if results:
+        print("\nSaving links to files...")
+        data_collector = DataCollector()
+        data_collector.batch_save_links(results, source_type="ncbi")
+        print("Links saved successfully")
+    
+    print("\nDone!")
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        logger = Logger.get_instance()
-        logger.exception(f"Unhandled exception in main: {str(e)}")
-        print(f"❌ An unexpected error occurred. Check logs/errors.log for details.")
+    main()
