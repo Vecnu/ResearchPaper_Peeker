@@ -175,14 +175,14 @@ def save_efetch_xml_responses(self, article_ids, output_dir=None):
     Returns:
         List of paths to saved XML files
     """
+    import os
+    from pathlib import Path
+    import datetime
+    
     saved_files = []
     
     # Create output directory for XML responses
     if output_dir is None:
-        from pathlib import Path
-        import os
-        import datetime
-        
         # Create a folder with today's date
         today = datetime.datetime.now().strftime("%Y-%m-%d")
         base_dir = Path("output")
