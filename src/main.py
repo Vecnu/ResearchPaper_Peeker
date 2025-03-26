@@ -21,6 +21,7 @@ def parse_arguments():
     parser.add_argument("--save-xml", action="store_true", help="Save XML responses for debugging")
     parser.add_argument("--debug", action="store_true", help="Run in debug mode")
     parser.add_argument("--max-results", type=int, default=100, help="Maximum number of results to return")
+    parser.add_argument("--download-only", action="store_true", help="Only download files from existing links")
     return parser.parse_args()
 
 def get_source_handler():
@@ -178,11 +179,25 @@ def main():
     display_service.display_results(results)
     
     # Save results
+    data_collector = DataCollector()
     if results:
         print("\nSaving links to files...")
-        data_collector = DataCollector()
         data_collector.batch_save_links(results, source_type="ncbi")
         print("Links saved successfully")
+        
+        # If download-only mode is selected, just download files from existing links
+        if args.download_only:
+            print("Download-only mode: Processing existing link files...")
+            data_collector = DataCollector()
+            output_dir = data_collector.create_date_folder()
+            data_collector.download_all_documents(output_dir)
+            return
+        
+        # Ask user if they want to download the files now
+        download_now = input("\nWould you like to download all supplementary materials now? (y/n): ").strip().lower()
+        if download_now == 'y' or download_now == 'yes':
+            print("\nDownloading supplementary materials...")
+            data_collector.download_all_documents()
     
     print("\nDone!")
 
