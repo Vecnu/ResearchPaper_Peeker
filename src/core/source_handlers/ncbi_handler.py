@@ -96,42 +96,34 @@ class NCBIHandler(BaseSourceHandler):
                         pmc_id = pmc_id.text
                         supp_links = []
                         
-                        # 1. Find supplementary material sections
-                        for supp in article.findall(".//supplementary-material"):
-                            # Use findall with xpath to get the attribute with namespace
-                            href = supp.get('{http://www.w3.org/1999/xlink}href')
-                            if href and any(href.lower().endswith(ext) for ext in ['.pdf', '.doc', '.docx', '.txt', '.rtf']):
-                                supp_links.append(href)
+                        # Find all supplementary material nodes
+                        supp_materials = article.findall(".//supplementary-material")
                         
-                        # 2. Find ext-link elements with supplementary file references
-                        for ext_link in article.findall(".//ext-link"):
-                            href = ext_link.get('{http://www.w3.org/1999/xlink}href')
-                            if href and any(href.lower().endswith(ext) for ext in ['.pdf', '.doc', '.docx', '.txt', '.rtf']):
-                                supp_links.append(href)
-                        
-                        # 3. Find media elements with supplementary files
-                        for media in article.findall(".//media"):
-                            href = media.get('{http://www.w3.org/1999/xlink}href')
-                            if href and any(href.lower().endswith(ext) for ext in ['.pdf', '.doc', '.docx', '.txt', '.rtf']):
-                                # For JMIR articles, construct the full URL
-                                if href.startswith('jmir_'):
-                                    full_href = f"https://asset.jmir.pub/assets/{href}"
-                                    supp_links.append(full_href)
-                                else:
-                                    # For other journals or if already a full URL
-                                    supp_links.append(href)
+                        for supp in supp_materials:
+                            # Look for media elements with xlink:href attributes
+                            media_elements = supp.findall(".//media")
+                            for media in media_elements:
+                                href = media.get("{http://www.w3.org/1999/xlink}href")
+                                if href:
+                                    # Construct the full URL for downloading
+                                    full_download_url = f"https://pmc.ncbi.nlm.nih.gov/articles/instance/{pmc_id}/bin/{href}"
+                                    supp_links.append(full_download_url)
+                                    print(f"Found supplementary material: {full_download_url}")
                         
                         if supp_links:
                             all_materials[pmc_id] = supp_links
-                            print(f"Found {len(supp_links)} supplementary files in PMC{pmc_id}")
-
-            print(f"\nCompleted scanning {total_processed} articles")
-            print(f"Found supplementary materials in {len(all_materials)} articles")
-            
-            return all_materials
-            
+                            print(f"  Article PMC{pmc_id}: Found {len(supp_links)} supplementary materials")
+                            
+                        # Add a sleep between batches
+                        if i < len(article_ids) - batch_size:
+                            time.sleep(1)
+                            
+                return all_materials
         except requests.exceptions.RequestException as e:
-            print(f"⚠️ Error fetching supplementary materials: {e}")
+            print(f"Error fetching supplementary materials: {e}")
+            return {}
+        except ET.ParseError as e:
+            print(f"Error parsing XML: {e}")
             return {}
 
 def process_search_results(self, query: str, max_results: int = 100):

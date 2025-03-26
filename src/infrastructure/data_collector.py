@@ -37,7 +37,8 @@ class DataCollector:
         # Write links to file
         with open(output_file, "w") as f:
             for link in links:
-                f.write(f"{source_id}_{link}\n")
+                # Save the full URL as is
+                f.write(f"{link}\n")
         
         print(f"Saved {len(links)} links for ID {source_id} to {output_file}")
         
