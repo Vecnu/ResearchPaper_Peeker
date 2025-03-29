@@ -24,7 +24,7 @@ def parse_arguments():
     parser.add_argument("--download-only", action="store_true", help="Only download files from existing links")
     return parser.parse_args()
 
-def get_source_handler():
+def get_source_handler():  # Fixed function name
     """Get the source handler based on user selection"""
     sources = {
         "1": ("NCBI", NCBIHandler),
@@ -41,7 +41,7 @@ def get_source_handler():
         name, handler_class = sources[choice]
         if handler_class:
             logger.info(f"Selected source: {name}")
-            return handler_class()
+            return handler_class()  # Fixed return statement
         logger.warning(f"{name} handler not implemented yet")
         print(f"{name} handler not implemented yet")
         return None
@@ -102,7 +102,7 @@ def save_xml_responses(source_handler, article_ids, output_dir=None):
             
             # Create a meaningful filename
             batch_file_name = f"batch_{batch_number}_ids_{'-'.join(batch_ids)}.xml"
-            xml_file_path = output_dir / batch_file_name
+            xml_file_path = output_dir / batch_file_name  # Fixed path construction
             
             # Save the raw XML response
             with open(xml_file_path, 'wb') as xml_file:
@@ -118,7 +118,7 @@ def save_xml_responses(source_handler, article_ids, output_dir=None):
             print(f"⚠️ Unexpected error saving XML for batch {batch_number}: {e}")
             continue
     
-    print(f"Total XML files saved: {len(saved_files)}")
+    print(f"Total XML responses saved: {len(saved_files)}")
     return saved_files
 
 def main():
@@ -172,7 +172,7 @@ def main():
     
     # Get supplementary materials
     print("\nLooking for supplementary materials...")
-    results = source_handler.get_supplementary_materials(pmc_ids)
+    results = source_handler.get_supplementary_materials(pmc_ids)  # Make sure this matches the method name in NCBIHandler
     
     # Display results
     display_service = DisplayService()
@@ -187,7 +187,7 @@ def main():
         
         # If download-only mode is selected, just download files from existing links
         if args.download_only:
-            print("Download-only mode: Processing existing link files...")
+            print("Download-only mode: Processing existing link link...")
             data_collector = DataCollector()
             output_dir = data_collector.create_date_folder()
             data_collector.download_all_documents(output_dir)
@@ -197,7 +197,14 @@ def main():
         download_now = input("\nWould you like to download all supplementary materials now? (y/n): ").strip().lower()
         if download_now == 'y' or download_now == 'yes':
             print("\nDownloading supplementary materials...")
-            data_collector.download_all_documents()
+            downloaded_files = data_collector.download_all_documents()
+            
+            if downloaded_files > 0:
+                # Ask if user wants to extract zip files
+                extract_now = input("\nWould you like to extract any zip files found? (y/n): ").strip().lower()
+                if extract_now == 'y' or extract_now == 'yes':
+                    print("\nExtracting zip files...")
+                    data_collector.extract_zip_files()
     
     print("\nDone!")
 

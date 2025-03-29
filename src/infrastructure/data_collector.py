@@ -261,3 +261,271 @@ class DataCollector:
             print(alternative_msg)
         
         return successful_downloads
+
+    def extract_zip_files(self, documents_dir=None):
+        """
+        Extract all .zip files in the documents directory directly into the documents directory
+        
+        Args:
+            documents_dir: Directory containing the downloaded files (optional)
+        
+        Returns:
+            Number of successfully extracted zip files
+        """
+        import zipfile
+        import os
+        from pathlib import Path
+        import logging
+        from support.logging_service import Logger
+        
+        # Get logger instance
+        logger = Logger.get_instance()
+        
+        # Use default documents directory if none is specified
+        if documents_dir is None:
+            if self.current_output_dir is None:
+                logger.warning("No output directory specified and no current directory set.")
+                print("No output directory specified and no current directory set.")
+                return 0
+            documents_dir = self.current_output_dir / "documents"
+        else:
+            documents_dir = Path(documents_dir)
+        
+        if not documents_dir.exists():
+            logger.warning(f"Documents directory not found: {documents_dir}")
+            print(f"Documents directory not found: {documents_dir}")
+            return 0
+        
+        # Find all .zip files in the documents directory
+        zip_files = list(documents_dir.glob("*.zip"))
+        if not zip_files:
+            logger.info("No zip files found to extract.")
+            print("No zip files found to extract.")
+            return 0
+        
+        logger.info(f"Found {len(zip_files)} zip files to extract.")
+        print(f"Found {len(zip_files)} zip files to extract.")
+        
+        # Statistics
+        successful_extractions = 0
+        failed_extractions = 0
+        total_files_extracted = 0
+        
+        # Process each zip file
+        for zip_file_path in zip_files:
+            try:
+                logger.info(f"Extracting {zip_file_path.name} directly to documents directory...")
+                print(f"Extracting {zip_file_path.name} directly to documents directory...")
+                
+                # Extract the zip file
+                with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+                    # Check for potentially harmful paths (zip slip vulnerability protection)
+                    files_to_extract = []
+                    for zip_info in zip_ref.infolist():
+                        if zip_info.filename.startswith('..') or zip_info.filename.startswith('/'):
+                            logger.warning(f"Skipping potentially unsafe path in zip file: {zip_info.filename}")
+                            continue
+                        
+                        # Skip directories
+                        if zip_info.filename.endswith('/'):
+                            continue
+                        
+                        # Get just the filename (ignore path)
+                        filename = os.path.basename(zip_info.filename)
+                        
+                        # If empty filename, skip
+                        if not filename:
+                            continue
+                        
+                        # Check if target file already exists
+                        target_path = documents_dir / filename
+                        if target_path.exists():
+                            # Create a unique name to avoid conflicts
+                            base_name = target_path.stem
+                            extension = target_path.suffix
+                            counter = 1
+                            while target_path.exists():
+                                new_name = f"{base_name}_{counter}{extension}"
+                                target_path = documents_dir / new_name
+                                counter += 1
+                            
+                            # Rename the file in the extraction process
+                            zip_info.filename = new_name
+                        else:
+                            zip_info.filename = filename
+                        
+                        files_to_extract.append(zip_info)
+                    
+                    # Extract files one by one with controlled filenames
+                    for zip_info in files_to_extract:
+                        zip_ref.extract(zip_info, documents_dir)
+                        total_files_extracted += 1
+                
+                successful_extractions += 1
+                logger.info(f"Successfully extracted {len(files_to_extract)} files from {zip_file_path.name}")
+                print(f"✅ Successfully extracted {len(files_to_extract)} files from {zip_file_path.name}")
+                
+            except zipfile.BadZipFile as e:
+                error_msg = f"Error extracting {zip_file_path.name}: Not a valid zip file"
+                logger.error(error_msg)
+                print(f"❌ {error_msg}")
+                failed_extractions += 1
+            except Exception as e:
+                error_msg = f"Error extracting {zip_file_path.name}: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                print(f"❌ {error_msg}")
+                failed_extractions += 1
+        
+        # Print summary
+        summary = f"\n📊 Extraction Summary:\n" \
+                  f"  Total zip files: {len(zip_files)}\n" \
+                  f"  Total files extracted: {total_files_extracted}\n" \
+                  f"  Successfully processed zip files: {successful_extractions}\n" \
+                  f"  Failed zip files: {failed_extractions}"
+        
+        logger.info(summary)
+        print(summary)
+        
+        return successful_extractions
+
+    def clean_documents_directory(self, documents_dir=None):
+        """
+        Clean the documents directory by removing files that aren't research documents
+        (excluding spreadsheets)
+        
+        Args:
+            documents_dir: Directory containing the documents (optional)
+        
+        Returns:
+            Number of files removed
+        """
+        import os
+        from pathlib import Path
+        import logging
+        from support.logging_service import Logger
+        
+        # Get logger instance
+        logger = Logger.get_instance()
+        
+        # Use default documents directory if none is specified
+        if documents_dir is None:
+            if self.current_output_dir is None:
+                logger.warning("No output directory specified and no current directory set.")
+                print("No output directory specified and no current directory set.")
+                return 0
+            documents_dir = self.current_output_dir / "documents"
+        else:
+            documents_dir = Path(documents_dir)
+        
+        if not documents_dir.exists():
+            logger.warning(f"Documents directory not found: {documents_dir}")
+            print(f"Documents directory not found: {documents_dir}")
+            return 0
+        
+        # Define allowed document extensions (case insensitive)
+        # Note: Spreadsheets (.xls, .xlsx, .csv, .tsv, .ods) have been removed
+        allowed_extensions = {
+            # Text documents
+            ".txt", ".doc", ".docx", ".rtf", ".odt", ".md", ".tex",
+            # PDFs
+            ".pdf",
+            # Data formats
+            ".json", ".xml", ".yaml", ".yml",
+            # Research specific formats
+            ".nb", ".ipynb", ".r", ".rmd", ".mat", ".sav", ".sas7bdat", ".dta",
+            # Code (potentially part of research)
+            ".py", ".r", ".m", ".do"
+        }
+        
+        # Explicitly define spreadsheet extensions to highlight they're being removed
+        spreadsheet_extensions = {".xls", ".xlsx", ".csv", ".tsv", ".ods"}
+        
+        # Find all files in the documents directory
+        all_files = list(documents_dir.glob("*"))
+        
+        # Count files by type
+        file_type_counts = {}
+        removed_files = []
+        kept_files = []
+        
+        for file_path in all_files:
+            if file_path.is_dir():
+                continue  # Skip directories
+            
+            extension = file_path.suffix.lower()
+            
+            # Count file types
+            if extension not in file_type_counts:
+                file_type_counts[extension] = 0
+            file_type_counts[extension] += 1
+            
+            # Check if we should keep this file
+            if extension in allowed_extensions:
+                kept_files.append(file_path)
+            else:
+                removed_files.append(file_path)
+                # Highlight spreadsheets being removed
+                if extension in spreadsheet_extensions:
+                    logger.info(f"Spreadsheet found for removal: {file_path.name}")
+        
+        # Log file type statistics
+        logger.info(f"File types found in documents directory:")
+        for ext, count in file_type_counts.items():
+            if ext in spreadsheet_extensions:
+                keep_status = "Remove (Spreadsheet)"
+            else:
+                keep_status = "Keep" if ext in allowed_extensions else "Remove"
+            logger.info(f"  {ext}: {count} files ({keep_status})")
+        
+        # Ask user to confirm removal
+        if removed_files:
+            spreadsheet_count = sum(1 for f in removed_files if f.suffix.lower() in spreadsheet_extensions)
+            other_count = len(removed_files) - spreadsheet_count
+            
+            print(f"\nFound {len(removed_files)} files to remove:")
+            if spreadsheet_count > 0:
+                print(f"  - {spreadsheet_count} spreadsheet files")
+            if other_count > 0:
+                print(f"  - {other_count} other non-document files")
+            
+            for ext, count in file_type_counts.items():
+                if ext not in allowed_extensions:
+                    status = "(Spreadsheet)" if ext in spreadsheet_extensions else ""
+                    print(f"  {ext}: {count} files {status}")
+            
+            confirm = input("\nDo you want to remove these non-document files? (y/n): ").strip().lower()
+            
+            if confirm == 'y' or confirm == 'yes':
+                # Remove files
+                for file_path in removed_files:
+                    try:
+                        os.remove(file_path)
+                        if file_path.suffix.lower() in spreadsheet_extensions:
+                            logger.info(f"Removed spreadsheet: {file_path.name}")
+                        else:
+                            logger.info(f"Removed: {file_path.name}")
+                    except Exception as e:
+                        logger.error(f"Error removing {file_path.name}: {str(e)}")
+            
+                print(f"✅ Removed {len(removed_files)} files in total:")
+                if spreadsheet_count > 0:
+                    print(f"   - {spreadsheet_count} spreadsheet files")
+                if other_count > 0:
+                    print(f"   - {other_count} other non-document files")
+            else:
+                print("File removal cancelled.")
+                return 0
+        else:
+            print("No non-document files found to remove.")
+            return 0
+        
+        # Print summary
+        summary = f"\n📊 Cleanup Summary:\n" \
+                  f"  Total files scanned: {len(all_files)}\n" \
+                  f"  Files kept: {len(kept_files)}\n" \
+                  f"  Files removed: {len(removed_files)} ({spreadsheet_count} spreadsheets)"
+        
+        logger.info(summary)
+        print(summary)
+        
+        return len(removed_files)
